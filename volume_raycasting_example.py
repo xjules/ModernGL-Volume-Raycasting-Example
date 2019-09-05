@@ -46,6 +46,13 @@ def load_raw(filename, volsize):
     
     return data
 
+def load_segy():
+    import segyio
+    filename = '/data/workspace/graphics_python/segyio-notebooks/data/basic/F3_Similarity_FEF_subvolume_IL230-430_XL475-675_T1600-1800.sgy'
+    data_vol = segyio.tools.cube(filename)
+    return data_vol
+
+
 def load_shader(filename):
     with open(os.path.join("glsl", filename), "r") as file:
         shadercode = file.read();
@@ -95,7 +102,7 @@ class QGLControllerWidget(QtOpenGL.QGLWidget):
         self.ctx = ModernGL.create_context()
         self.resizeGL(self.width(), self.height())
 
-        self.volume_texture = self.ctx.texture3d(self.volume_size, 1, self.volume_data.tobytes())
+        self.volume_texture = self.ctx.texture3d(self.volume_size, 1, self.volume_data.tobytes(), alignment=4, floats=True)
         self.volume_texture.repeat_x = True
         self.volume_texture.repeat_y = True
         # @Todo: ModernGL this raises an error - probably missing wrapper
@@ -246,18 +253,18 @@ class QGLControllerWidget(QtOpenGL.QGLWidget):
         self.update()
 
         # FPS Counter
-        dt = time.perf_counter() - render_start
-        if hasattr(self, "last_frame_counter"):
-            self.last_frame_counter += 1
-            self.last_frame_time_acc += dt
-            if self.last_frame_counter == 10:
-                avg_frame_time = self.last_frame_time_acc / 10
-                print("%.3f ms, %.1f FPS" % (avg_frame_time*1000, 1./(avg_frame_time)))
-                self.last_frame_time_acc = 0
-                self.last_frame_counter = 1
-        else:
-            self.last_frame_time_acc = dt
-            self.last_frame_counter = 1
+        # dt = time.perf_counter() - render_start
+        # if hasattr(self, "last_frame_counter"):
+        #     self.last_frame_counter += 1
+        #     self.last_frame_time_acc += dt
+        #     if self.last_frame_counter == 10:
+        #         avg_frame_time = self.last_frame_time_acc / 10
+        #         print("%.3f ms, %.1f FPS" % (avg_frame_time*1000, 1./(avg_frame_time)))
+        #         self.last_frame_time_acc = 0
+        #         self.last_frame_counter = 1
+        # else:
+        #     self.last_frame_time_acc = dt
+        #     self.last_frame_counter = 1
 
     def resizeGL(self, width, height):
         self.color_texture = None
@@ -402,8 +409,10 @@ class QGLControllerWidget(QtOpenGL.QGLWidget):
 def main():
 
     # assumes unsigned byte datatype and volume dimensions of 256x256x225
-    volsize = (256, 256, 225)
-    volume = load_raw(os.path.join("data", "head256.raw"), volsize)
+    # volsize = (256, 256, 225)
+    volsize = (191, 146, 51)
+    # volume = load_raw(os.path.join("data", "head256.raw"), volsize)
+    volume = load_segy()
     tff = load_transferfunction(os.path.join("data", "tff.dat"))
 
     app = QtWidgets.QApplication([])
