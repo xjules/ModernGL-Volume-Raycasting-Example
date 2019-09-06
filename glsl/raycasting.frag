@@ -36,6 +36,34 @@ void main()
     int numSteps = int(ceil(len / effectiveStepSize));
 
     // This loops over all samples along the ray and integrates the color
+    // max intensity proj
+    float max_intensity = 0.0;
+    for(int i = 0; i < numSteps; i++)
+    {
+        float intensity = texture(VolumeTex, voxelCoord).x;
+        vec4 colorSample = texture(TransferFunc, vec2(intensity, 0.));
+        max_intensity = max(intensity, max_intensity);
+
+        if (colorSample.a > 0.0) {
+            // accomodate for variable sampling rates
+            colorSample.a = 1.0 - pow(1.0 - colorSample.a, effectiveStepSize*200.0f);
+            // front-to-back blending of the samples
+            colorAccum.rgb += (1.0 - colorAccum.a) * colorSample.rgb * colorSample.a;
+            colorAccum.a += (1.0 - colorAccum.a) * colorSample.a;
+        }
+
+        voxelCoord += deltaDir;
+
+        // if the opacity is (almost) saturated, we can stop raycasting
+        if (colorAccum.a > .97) {
+            colorAccum.a = 1.0;
+            break;
+        }
+    }
+    colorAccum = vec4(max_intensity, max_intensity, max_intensity, 1.0);
+
+    //DVR
+    /*
     for(int i = 0; i < numSteps; i++)
     {
         // sample scalar intensity value from the volume
@@ -62,6 +90,7 @@ void main()
             break;
         }
     }
+    */
     // blend the background color using an "under" blend operation
     FragColor = mix(BackgroundColor, colorAccum, colorAccum.a); 
     
