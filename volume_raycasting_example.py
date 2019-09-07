@@ -14,6 +14,7 @@ from pyrr import Matrix44
 from PyQt5 import QtCore, QtGui, QtOpenGL, QtWidgets
 from OpenGL.GL import glEnable, glDisable, glCullFace, GL_CULL_FACE, GL_FRONT, GL_BACK
 from OpenGL.GL import glBindFramebuffer, GL_FRAMEBUFFER
+from tf_plot import TFPlotWindow
 
 try:
     import ModernGL
@@ -25,6 +26,8 @@ def load_transferfunction(filename):
     with open(filename,'rb') as fid:
         data = np.fromfile(fid, count=-1,dtype=np.ubyte)
     return data
+
+
 
 
 def load_raw(filename, volsize):
@@ -64,7 +67,7 @@ def load_shader(filename):
     return shadercode
 
 class QGLControllerWidget(QtOpenGL.QGLWidget):
-    def __init__(self, volume_data, volsize, transferfunction, parent=None):
+    def __init__(self, volume_data, volsize, parent=None):
         fmt = QtOpenGL.QGLFormat()
         fmt.setVersion(4, 1)
         fmt.setProfile(QtOpenGL.QGLFormat.CoreProfile)
@@ -76,7 +79,7 @@ class QGLControllerWidget(QtOpenGL.QGLWidget):
 
         self.volume_data = volume_data
         self.volume_size = volsize
-        self.tff_data = transferfunction
+        self.tff_window = TFPlotWindow(vol_window=self)
 
         self.volume_texture = None
         self.tff_texture = None
@@ -102,6 +105,13 @@ class QGLControllerWidget(QtOpenGL.QGLWidget):
         self.keyTimer = QtCore.QTimer()
         self.keyTimer.timeout.connect(self.evalKeyState)
 
+    def get_tff_data(self):
+        return self.tff_window.tff.get_tff_as_rgba()
+
+    def update_texture(self):
+        self.tff_texture.write(self.get_tff_data().tobytes())
+        self.update()
+
     def initializeGL(self):
         """ Initializes the OpenGL Context and pipeline, and creates + uploads textures for the volume and transfer function """
         self.ctx = ModernGL.create_context()
@@ -114,7 +124,8 @@ class QGLControllerWidget(QtOpenGL.QGLWidget):
         #self.volume_texture.repeat_z = True
         self.volume_texture.filter = ModernGL.LINEAR
 
-        self.tff_texture = self.ctx.texture((256,1), 4, self.tff_data.tobytes())
+        tff_data = self.get_tff_data()
+        self.tff_texture = self.ctx.texture((len(tff_data),1), 4, tff_data.tobytes(), alignment=4, floats=4)
         self.tff_texture.repeat_x = True
         self.tff_texture.repeat_y = True
         self.tff_texture.filter = ModernGL.NEAREST
@@ -419,12 +430,12 @@ def main():
     # volume = load_raw(os.path.join("data", "head256.raw"), volsize)
     volume = load_segy()
     volsize = volume.shape
-    tff = load_transferfunction(os.path.join("data", "tff.dat"))
 
     app = QtWidgets.QApplication([])
-    window = QGLControllerWidget(volume, volsize, tff)
+    window = QGLControllerWidget(volume, volsize)
     window.move(QtWidgets.QDesktopWidget().rect().center() - window.rect().center())
     window.show()
+    window.tff_window.show()
     app.exec_()
 
 if __name__ == '__main__':

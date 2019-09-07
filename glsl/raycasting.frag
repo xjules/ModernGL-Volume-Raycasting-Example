@@ -37,6 +37,7 @@ void main()
 
     // This loops over all samples along the ray and integrates the color
     // max intensity proj
+    /*
     float max_intensity = 0.0;
     for(int i = 0; i < numSteps; i++)
     {
@@ -61,9 +62,8 @@ void main()
         }
     }
     colorAccum = vec4(max_intensity, max_intensity, max_intensity, 1.0);
-
+    */
     //DVR
-    /*
     for(int i = 0; i < numSteps; i++)
     {
         // sample scalar intensity value from the volume
@@ -90,7 +90,6 @@ void main()
             break;
         }
     }
-    */
     // blend the background color using an "under" blend operation
     FragColor = mix(BackgroundColor, colorAccum, colorAccum.a); 
     
