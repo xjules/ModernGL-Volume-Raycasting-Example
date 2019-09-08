@@ -54,8 +54,8 @@ def load_segy():
     # filename = '/data/workspace/graphics_python/segyio-notebooks/data/basic/F3_Similarity_FEF_subvolume_IL230-430_XL475-675_T1600-1800.sgy'
     # data_vol = segyio.tools.cube(filename)
 
-    filename = '/data/workspace/graphics_python/gpu_computing/data/01NmoUpd_8-16stkEps_985_1281-cropped.sgy'
-    filename = '/data/workspace/graphics_python/gpu_computing/data/relAI-0.sgy'
+    # filename = '/data/workspace/graphics_python/gpu_computing/data/01NmoUpd_8-16stkEps_985_1281-cropped.sgy'
+    filename = os.path.abspath('../gpu_computing/data/relAI-0.sgy')
     f = segyio.open(filename, iline=5, xline=21)
     data_vol = segyio.tools.cube(f)
     return data_vol
