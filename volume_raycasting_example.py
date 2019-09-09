@@ -9,7 +9,7 @@ import time
 
 import numpy as np
 # @Todo XXX dependency to pyrr should be removed
-from pyrr import Matrix44
+from pyrr import Matrix44, Vector3
 
 from PyQt5 import QtCore, QtGui, QtOpenGL, QtWidgets
 from OpenGL.GL import glEnable, glDisable, glCullFace, GL_CULL_FACE, GL_FRONT, GL_BACK
@@ -54,8 +54,9 @@ def load_segy():
     # filename = '/data/workspace/graphics_python/segyio-notebooks/data/basic/F3_Similarity_FEF_subvolume_IL230-430_XL475-675_T1600-1800.sgy'
     # data_vol = segyio.tools.cube(filename)
 
-    # filename = '/data/workspace/graphics_python/gpu_computing/data/01NmoUpd_8-16stkEps_985_1281-cropped.sgy'
-    filename = os.path.abspath('../gpu_computing/data/relAI-0.sgy')
+    filename = '/data/workspace/graphics_python/gpu_computing/data/01NmoUpd_8-16stkEps_985_1281-cropped.sgy'
+    # filename = os.path.abspath('../gpu_computing/data/full_size/01NmoUpd_8-16stkEps_985_1281.sgy')
+    # filename = os.path.abspath('../gpu_computing/data/relAI-0.sgy')
     f = segyio.open(filename, iline=5, xline=21)
     data_vol = segyio.tools.cube(f)
     return data_vol
@@ -93,8 +94,12 @@ class QGLControllerWidget(QtOpenGL.QGLWidget):
         # Samplig rate controls the distance of the raycasting samples
         self.sampling_rate = 0.5
 
-        self.camera_center = QtGui.QVector3D(0.5, 0.5, 0.5)  ## will always appear at the center of the volume
-        self.camera_distance = 3.0          ## distance of camera from center
+        self._x = 1.0
+        self._y = 1.0
+        self._z = volume_data.shape[2] / volume_data.shape[1]
+
+        self.camera_center = QtGui.QVector3D(0.5, 0.5, self._z / 2)  ## will always appear at the center of the volume
+        self.camera_distance = self._z          ## distance of camera from center
         self.camera_fov =  60               ## horizontal field of view in degrees
         self.camera_elevation =  30         ## camera's angle of elevation in degrees
         self.camera_azimuth = 45            ## camera's azimuthal angle in degrees 
@@ -106,7 +111,7 @@ class QGLControllerWidget(QtOpenGL.QGLWidget):
         self.keyTimer.timeout.connect(self.evalKeyState)
 
     def get_tff_data(self):
-        return self.tff_window.tff.get_tff_as_rgba()
+        return self.tff_window.tff
 
     def update_texture(self):
         self.tff_texture.write(self.get_tff_data().tobytes())
@@ -146,13 +151,13 @@ class QGLControllerWidget(QtOpenGL.QGLWidget):
         self.vbo_vertex = self.ctx.buffer(struct.pack(
             '24f',
             0.0, 0.0, 0.0,
-            0.0, 0.0, 1.0,
-            0.0, 1.0, 0.0,
-            0.0, 1.0, 1.0,
-            1.0, 0.0, 0.0,
-            1.0, 0.0, 1.0,
-            1.0, 1.0, 0.0,
-            1.0, 1.0, 1.0
+            0.0, 0.0, self._z,
+            0.0, self._y, 0.0,
+            0.0, self._y, self._z,
+            self._x, 0.0, 0.0,
+            self._x, 0.0, self._z,
+            self._x, self._y, 0.0,
+            self._x, self._y, self._z
         ))
 
         # This is the index buffer for our bounding geometry. Every row specifies a triangle
@@ -242,6 +247,10 @@ class QGLControllerWidget(QtOpenGL.QGLWidget):
         self.fbo.clear()
         self.fbo.use()
         self.setup_camera(self.prog_eep)
+
+        model_mat = Matrix44.from_scale(Vector3([1, 1, 1]))
+        self.prog_eep.uniforms['ModelMat'].write(model_mat.astype('float32').tobytes())
+
         self.draw_box_eep()
 
         if hasattr(ModernGL, "default_framebuffer"):
@@ -267,20 +276,6 @@ class QGLControllerWidget(QtOpenGL.QGLWidget):
 
         self.ctx.finish()
         self.update()
-
-        # FPS Counter
-        # dt = time.perf_counter() - render_start
-        # if hasattr(self, "last_frame_counter"):
-        #     self.last_frame_counter += 1
-        #     self.last_frame_time_acc += dt
-        #     if self.last_frame_counter == 10:
-        #         avg_frame_time = self.last_frame_time_acc / 10
-        #         print("%.3f ms, %.1f FPS" % (avg_frame_time*1000, 1./(avg_frame_time)))
-        #         self.last_frame_time_acc = 0
-        #         self.last_frame_counter = 1
-        # else:
-        #     self.last_frame_time_acc = dt
-        #     self.last_frame_counter = 1
 
     def resizeGL(self, width, height):
         self.color_texture = None
@@ -422,6 +417,12 @@ class QGLControllerWidget(QtOpenGL.QGLWidget):
         else:
             self.keyTimer.stop()
 
+
+#wierd test of median filter
+def median_filter(arr):
+    from scipy.signal import medfilt
+    return medfilt(arr, (3, 3, 3))
+
 def main():
 
     # assumes unsigned byte datatype and volume dimensions of 256x256x225
@@ -429,6 +430,9 @@ def main():
     volsize = (191, 146, 51)
     # volume = load_raw(os.path.join("data", "head256.raw"), volsize)
     volume = load_segy()
+    volume = median_filter(volume).astype(np.float32)
+
+    volume = (volume - volume.min()) / (volume.max() - volume.min())
     volsize = volume.shape
 
     app = QtWidgets.QApplication([])

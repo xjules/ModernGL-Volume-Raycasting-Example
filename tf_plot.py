@@ -13,6 +13,7 @@ class TFPlot(FigureCanvas):
         self._load_data()
         self._vol_window = vol_window
         self.fig = Figure()
+        self.counts = None
         FigureCanvas.__init__(self, self.fig)
         self.axes = self.fig.add_subplot(111)
 
@@ -24,7 +25,13 @@ class TFPlot(FigureCanvas):
         self.axes.clear()
         self.axes.set_xlim(left=0, right=1)
         self.axes.set_ylim(bottom=0, top=1)
-        self.axes.hist(self._vol_window.volume_data.flatten(), density=True, stacked=True)
+        if self.counts is None:
+            self.counts, self.bins = np.histogram(self._vol_window.volume_data.flatten(),
+                                                  bins=20,
+                                                  density=True)
+            self.bins = (self.bins[1:] + self.bins[:-1]) / 2
+        # self.axes.hist(self._vol_window.volume_data.flatten(), density=True, stacked=True)
+        self.axes.hist(self.bins, bins=len(self.counts), weights=self.counts)
         self.axes.plot(np.linspace(0, 1, len(self._data)), self._data, 'go--')
         self.draw()
 
@@ -39,13 +46,14 @@ class TFPlot(FigureCanvas):
 
     def get_tff_as_rgba(self):
         intensities = self._data
-        rgba = cm.RdYlBu(np.linspace(0, 1, len(intensities))).astype(np.float32)
+        rgba = cm.seismic(np.linspace(0, 1, len(intensities))).astype(np.float32)
         rgba[:,3] = intensities[:]
         return rgba
 
     def _load_data(self):
         #mocking loading from file
-        self._data = np.linspace(0, 1, 20, dtype=np.float32)
+        # self._data = np.linspace(0, 1, 20, dtype=np.float32)
+        self._data = np.zeros(20, dtype=np.float32)
 
 class TFPlotWindow(QtWidgets.QMainWindow):
 
@@ -59,7 +67,7 @@ class TFPlotWindow(QtWidgets.QMainWindow):
 
     @property
     def tff(self):
-        return self.sp
+        return self.sp.get_tff_as_rgba()
 
 if __name__ == '__main__':
     pass
