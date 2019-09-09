@@ -16,9 +16,26 @@ from numba import guvectorize
 #         for j in range(-2, 3):
 #             for k in range(-2, 3):
 
-
+from scipy import signal
 
 # do 1D filtering along z axis!!!!
+def inverse_wt_vol(vol):
+    dim = vol.shape
+    out_vol = np.empty_like(vol)
+    for ix, iy in np.ndindex(dim[:2]):
+        # iwt = inverse_wt(vol[ix, iy])
+        sgn = signal.ricker(5, 4)
+        out_vol[ix, iy] = deconvolve(vol[ix, iy], sgn)[1]
+        # out_vol[ix, iy] = iwt[::2]
+    return out_vol
+
+def inverse_wt(a):
+    import pywt
+    return pywt.idwt(a, None, 'db2')
+
+def deconvolve(a, sgn):
+    return signal.deconvolve(a, sgn)
+
 
 @guvectorize(['void(float32[:], intp[:], float32[:])'], '(n),()->(n)')
 def move_mean(a, window_arr, out):
@@ -43,8 +60,8 @@ def median_filter(arr):
 def load_segy():
     import segyio
     filename = os.path.abspath('../gpu_computing/data/full_size/01NmoUpd_8-16stkEps_985_1281.sgy')
-    filename = os.path.abspath('../gpu_computing/data/full_size/relAI-0.sgy')
-    filename = '/data/workspace/graphics_python/gpu_computing/data/01NmoUpd_8-16stkEps_985_1281-cropped.sgy'
+    # filename = os.path.abspath('../gpu_computing/data/full_size/relAI-0.sgy')
+    # filename = '/data/workspace/graphics_python/gpu_computing/data/01NmoUpd_8-16stkEps_985_1281-cropped.sgy'
     f = segyio.open(filename, iline=5, xline=21)
     data_vol = segyio.tools.cube(f)
     return data_vol
@@ -52,10 +69,15 @@ def load_segy():
 
 if __name__ == '__main__':
     data = load_segy()
+    data_wt = inverse_wt_vol(data)
     fig = plt.figure(figsize=(14, 6))
-    ax1 = fig.add_subplot(111)
-    amp = ax1.imshow(data[:, 200, :].T, cmap='viridis')
-    fig.colorbar(amp, ax=ax1)
+
+    f, (ax1, ax2) = plt.subplots(1, 2, sharey=True)
+    amp1 = ax1.imshow(data[:, 200, :].T, cmap='viridis', aspect='auto')
+
+    amp2 = ax2.imshow(data_wt[:, 200, :].T, cmap='viridis', aspect='auto')
+    # ax1.autoscale('tight')
+    fig.colorbar(amp1, ax=ax1)
     ax1.set_xticks([])
     ax1.set_yticks([])
     ax1.invert_xaxis()
