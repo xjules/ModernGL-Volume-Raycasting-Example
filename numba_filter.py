@@ -2,39 +2,45 @@ import matplotlib
 import matplotlib.pyplot as plt
 import os
 import numpy as np
-from numba import cuda
+from numba import cuda, float32
 from numba import guvectorize
 
-#
-# @cuda.jit
-# def process_gauss_volume(vol_in, vol_out):
-#     idy, idz = cuda.grid(2)
-#     idx = cuda.blockIdx.z
-#     for i in range(-2, 3):
-#         ix = idx + i
-#
-#         for j in range(-2, 3):
-#             for k in range(-2, 3):
+@cuda.jit(device=True)
+def get_median_item(a, N):
+    b = cuda.local.array(5, float32)
+    for i in range(N):
+        b[i] = a[i]
 
-from scipy import signal
+    for end in range(N, 1, -1):
+        for i in range(end - 1):
+            if b[i] > b[i + 1]:
+                tmp = b[i]
+                b[i] = b[i+1]
+                b[i+1] = tmp
 
-# do 1D filtering along z axis!!!!
-def inverse_wt_vol(vol):
-    dim = vol.shape
-    out_vol = np.empty_like(vol)
-    for ix, iy in np.ndindex(dim[:2]):
-        # iwt = inverse_wt(vol[ix, iy])
-        sgn = signal.ricker(5, 4)
-        out_vol[ix, iy] = deconvolve(vol[ix, iy], sgn)[1]
-        # out_vol[ix, iy] = iwt[::2]
-    return out_vol
+    return b[int(N / 2)]
 
-def inverse_wt(a):
-    import pywt
-    return pywt.idwt(a, None, 'db2')
+@cuda.jit('(float32[:,:,:], float32[:,:,:])')
+def median_filter_cuda(vol_in, vol_out):
+    # idy, idz = cuda.grid(2)
+    idx = cuda.threadIdx.z
+    idy = cuda.blockIdx.y * cuda.blockDim.y + cuda.threadIdx.y
+    idz = cuda.blockIdx.z * cuda.blockDim.z + cuda.threadIdx.z
 
-def deconvolve(a, sgn):
-    return signal.deconvolve(a, sgn)
+
+    check = (idx < vol_in.shape[0] and
+             idy < vol_in.shape[1] and
+             idz < vol_in.shape[2])
+
+    if check:
+        min_z = max(idz - 2, 0)
+        max_z = min(idz + 2, vol_out.shape[2])
+        b = cuda.local.array(5, float32)
+
+        for i in range(min_z, max_z+1):
+            b[i-min_z] = vol_in[idx, idy, i]
+
+        vol_out[idx, idy, idz] = get_median_item(b, max_z - min_z + 1)
 
 
 @guvectorize(['void(float32[:], intp[:], float32[:])'], '(n),()->(n)')
@@ -55,7 +61,7 @@ def move_mean(a, window_arr, out):
 #median filter
 def median_filter(arr):
     from scipy.signal import medfilt
-    return medfilt(arr, (3, 3, 3))
+    return medfilt(arr, (1, 1, 3))
 
 def load_segy():
     import segyio
@@ -69,25 +75,33 @@ def load_segy():
 
 if __name__ == '__main__':
     data = load_segy()
-    data_wt = inverse_wt_vol(data)
-    fig = plt.figure(figsize=(14, 6))
+    # fig = plt.figure(figsize=(14, 6))
+
+    data_out = np.empty_like(data)
+
+    stream = cuda.stream()
+
+    threadsperblock = (data.shape[0], 16, 16)
+    blockspergrid = (data.shape[1]//threadsperblock[1] + 1, data.shape[2]//threadsperblock[2] + 1)
+
+    print(threadsperblock, blockspergrid)
+
+    with stream.auto_synchronize():
+        dA = cuda.to_device(data, stream)
+        dB = cuda.to_device(data_out, stream)
+        median_filter_cuda[blockspergrid, threadsperblock, stream](dA, dB)
+        dB.copy_to_host(data_out, stream)
 
     f, (ax1, ax2) = plt.subplots(1, 2, sharey=True)
     amp1 = ax1.imshow(data[:, 200, :].T, cmap='viridis', aspect='auto')
 
-    amp2 = ax2.imshow(data_wt[:, 200, :].T, cmap='viridis', aspect='auto')
-    # ax1.autoscale('tight')
-    fig.colorbar(amp1, ax=ax1)
+    amp2 = ax2.imshow(data_out[:, 200, :].T, cmap='viridis', aspect='auto')
+    # fig.colorbar(amp1, ax=ax1)
     ax1.set_xticks([])
     ax1.set_yticks([])
     ax1.invert_xaxis()
 
     plt.show()
-
-
-    # griddim = 1, 2
-    # blockdim = 3, 4
-    # foo[griddim, blockdim](aryA, aryB)
 
 
 
